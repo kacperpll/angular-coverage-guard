@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 
-const SKIP_DIR_NAMES = new Set(['node_modules', 'dist']);
+const SKIP_DIR_NAMES = new Set(['node_modules', 'dist', '.git']);
 
 export function findProjectRootUpward(startDir) {
   let dir = startDir;
@@ -50,6 +50,17 @@ export function findProjectRootsDownward(startDir, maxDepth = 3) {
   return found;
 }
 
+// Shared by the interactive scripts (which disambiguate a single project to use) and the Stop
+// hook (which instead checks every project it finds, since it can't ask the user anything).
+export function findAllProjectRoots(cwd) {
+  const upward = findProjectRootUpward(cwd);
+  if (upward) {
+    return { roots: [upward], source: 'upward' };
+  }
+
+  return { roots: findProjectRootsDownward(cwd, 3), source: 'downward' };
+}
+
 export function locateProjectRoot(cwd, explicitProjectDir) {
   if (explicitProjectDir) {
     const absolute = path.resolve(cwd, explicitProjectDir);
@@ -61,19 +72,14 @@ export function locateProjectRoot(cwd, explicitProjectDir) {
     return { status: 'not-found-at-explicit-path', path: absolute };
   }
 
-  const upward = findProjectRootUpward(cwd);
-  if (upward) {
-    return { status: 'found', projectRoot: upward, source: 'upward' };
+  const { roots, source } = findAllProjectRoots(cwd);
+
+  if (roots.length === 1) {
+    return { status: 'found', projectRoot: roots[0], source };
   }
 
-  const downward = findProjectRootsDownward(cwd, 3);
-
-  if (downward.length === 1) {
-    return { status: 'found', projectRoot: downward[0], source: 'downward' };
-  }
-
-  if (downward.length > 1) {
-    return { status: 'multiple', candidates: downward };
+  if (roots.length > 1) {
+    return { status: 'multiple', candidates: roots };
   }
 
   return { status: 'none' };

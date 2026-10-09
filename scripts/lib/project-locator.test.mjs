@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { findProjectRootsDownward, findProjectRootUpward, locateProjectRoot } from './project-locator.mjs';
+import { findAllProjectRoots, findProjectRootsDownward, findProjectRootUpward, locateProjectRoot } from './project-locator.mjs';
 
 function withTempDir(fn) {
   const dir = mkdtempSync(path.join(tmpdir(), 'coverage-guard-locator-'));
@@ -58,10 +58,11 @@ test('findProjectRootsDownward finds multiple angular.json files', () => {
   });
 });
 
-test('findProjectRootsDownward does not descend into node_modules or dist', () => {
+test('findProjectRootsDownward does not descend into node_modules, dist, or .git', () => {
   withTempDir((root) => {
     touchAngularJson(path.join(root, 'node_modules', 'some-pkg'));
     touchAngularJson(path.join(root, 'dist', 'demo-app'));
+    touchAngularJson(path.join(root, '.git', 'weird-nested-thing'));
     const found = findProjectRootsDownward(root, 3);
     assert.deepEqual(found, []);
   });
@@ -129,5 +130,45 @@ test('locateProjectRoot: nothing found anywhere stops cleanly', () => {
   withTempDir((root) => {
     const result = locateProjectRoot(root, undefined);
     assert.equal(result.status, 'none');
+  });
+});
+
+test('findAllProjectRoots: cwd is a repo root with a nested Angular project below it (the scenario the hook missed)', () => {
+  withTempDir((root) => {
+    mkdirSync(path.join(root, '.git'));
+    touchAngularJson(path.join(root, 'examples', 'demo-app'));
+    const { roots, source } = findAllProjectRoots(root);
+    assert.deepEqual(roots, [path.join(root, 'examples', 'demo-app')]);
+    assert.equal(source, 'downward');
+  });
+});
+
+test('findAllProjectRoots: an upward match wins outright, even if a project also exists downward', () => {
+  withTempDir((root) => {
+    touchAngularJson(root);
+    touchAngularJson(path.join(root, 'examples', 'demo-app'));
+    const { roots, source } = findAllProjectRoots(root);
+    assert.deepEqual(roots, [root]);
+    assert.equal(source, 'upward');
+  });
+});
+
+test('findAllProjectRoots: returns every project found downward, unlike locateProjectRoot it does not ask', () => {
+  withTempDir((root) => {
+    touchAngularJson(path.join(root, 'apps', 'one'));
+    touchAngularJson(path.join(root, 'apps', 'two'));
+    const { roots, source } = findAllProjectRoots(root);
+    assert.equal(source, 'downward');
+    assert.deepEqual(
+      roots.sort(),
+      [path.join(root, 'apps', 'one'), path.join(root, 'apps', 'two')].sort(),
+    );
+  });
+});
+
+test('findAllProjectRoots: returns an empty array when nothing is found anywhere', () => {
+  withTempDir((root) => {
+    const { roots } = findAllProjectRoots(root);
+    assert.deepEqual(roots, []);
   });
 });

@@ -4,11 +4,15 @@ import path from 'node:path';
 import { loadUserConfig, resolveExcludeConfig, resolveHookEnabled } from '../scripts/lib/config.mjs';
 import { isExcluded, resolveExcludes } from '../scripts/lib/exclude.mjs';
 import { getWorkingTreeChangedFiles } from '../scripts/lib/git.mjs';
-import { findProjectRootUpward } from '../scripts/lib/project-locator.mjs';
+import { findAllProjectRoots } from '../scripts/lib/project-locator.mjs';
 import { toSpecRelativePath } from '../scripts/lib/spec-finder.mjs';
 
 function isSourceTs(relativePath) {
   return relativePath.endsWith('.ts') && !relativePath.endsWith('.spec.ts') && !relativePath.endsWith('.test.ts');
+}
+
+function toPosix(relativePath) {
+  return relativePath.split(path.sep).join('/');
 }
 
 function stateFilePath(sessionId) {
@@ -48,6 +52,22 @@ function sameSet(a, b) {
   return sortedA.every((value, index) => value === sortedB[index]);
 }
 
+function flaggedFilesForProject(projectRoot) {
+  const userConfig = loadUserConfig(projectRoot);
+  if (!resolveHookEnabled(userConfig)) {
+    return [];
+  }
+
+  const excludes = resolveExcludes(resolveExcludeConfig(userConfig));
+  const changedFiles = getWorkingTreeChangedFiles(projectRoot);
+  const changedSet = new Set(changedFiles);
+
+  return changedFiles
+    .filter(isSourceTs)
+    .filter((file) => !isExcluded(file, excludes))
+    .filter((file) => !changedSet.has(toSpecRelativePath(file)));
+}
+
 function main() {
   const payload = JSON.parse(readFileSync(0, 'utf8'));
 
@@ -55,25 +75,21 @@ function main() {
     return;
   }
 
+  // Same project detection the skill uses: upward first, then downward (max 3 levels, skipping
+  // node_modules/dist/.git). Unlike the skill, several matches downward aren't ambiguous here -
+  // there's no one to ask, so every project found is checked and the results are merged.
   const cwd = payload.cwd ?? process.cwd();
-  const projectRoot = findProjectRootUpward(cwd);
-  if (!projectRoot) {
+  const { roots: projectRoots } = findAllProjectRoots(cwd);
+
+  if (projectRoots.length === 0) {
     return;
   }
 
-  const userConfig = loadUserConfig(projectRoot);
-  if (!resolveHookEnabled(userConfig)) {
-    return;
-  }
-
-  const excludes = resolveExcludes(resolveExcludeConfig(userConfig));
-  const changedFiles = getWorkingTreeChangedFiles(projectRoot);
-  const changedSet = new Set(changedFiles);
-
-  const flaggedFiles = changedFiles
-    .filter(isSourceTs)
-    .filter((file) => !isExcluded(file, excludes))
-    .filter((file) => !changedSet.has(toSpecRelativePath(file)))
+  const flaggedFiles = projectRoots
+    .flatMap((projectRoot) => {
+      const prefix = projectRoots.length > 1 ? `${toPosix(path.relative(cwd, projectRoot))}/` : '';
+      return flaggedFilesForProject(projectRoot).map((file) => `${prefix}${file}`);
+    })
     .sort();
 
   const sessionId = payload.session_id ?? 'unknown-session';
