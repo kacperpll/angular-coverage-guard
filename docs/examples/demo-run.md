@@ -1,14 +1,14 @@
-# `/coverage-check --all` on `examples/demo-app` — a recorded run
+# `/angular-coverage-guard:coverage-check --all` on `examples/demo-app` — a recorded run
 
-This is one real `/coverage-check --all` session against this repo's own demo app, kept as
-reference material for the README. `examples/demo-app` is deliberately left in a partially-covered
-state; the tests proposed and written below were removed again right after this session so the demo
-keeps demonstrating real gaps for the next person who tries the plugin.
+This is one real `/angular-coverage-guard:coverage-check --all` session against this repo's own
+demo app, kept as reference material for the README. `examples/demo-app` is deliberately left in a
+partially-covered state; the tests proposed and written below were removed again right after this
+session so the demo keeps demonstrating real gaps for the next person who tries the plugin.
 
 ## Command
 
 ```
-/coverage-check --all
+/angular-coverage-guard:coverage-check --all
 ```
 
 No project directory was given — the skill let `coverage-check.mjs` auto-discover it.

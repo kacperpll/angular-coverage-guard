@@ -102,7 +102,7 @@ function main() {
 
   console.log(
     JSON.stringify({
-      systemMessage: `angular-coverage-guard: changed without a matching spec update: ${flaggedFiles.join(', ')}. Try /coverage-check.`,
+      systemMessage: `angular-coverage-guard: changed without a matching spec update: ${flaggedFiles.join(', ')}. Try /angular-coverage-guard:coverage-check.`,
     }),
   );
 }

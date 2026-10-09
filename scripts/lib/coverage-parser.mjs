@@ -57,8 +57,20 @@ export function snippetAt(fileContent, lineNumber) {
   return (lines[lineNumber - 1] ?? '').trim();
 }
 
+// V8/Angular's coverage instrumentation attributes some branches to the class declaration or a
+// bare decorator line (DI factory wiring, change-detection strategy checks, …), not to anything a
+// developer wrote or could test. These are filtered out here, where the source snippet needed to
+// recognize them is already available, rather than left for the skill to judge case by case.
+const FRAMEWORK_NOISE_PATTERNS = [/^(export\s+)?(abstract\s+)?class\s+\w+/, /^@(Pipe|Component|Injectable|Directive)\s*\(/];
+
+function isFrameworkNoise(snippet) {
+  return FRAMEWORK_NOISE_PATTERNS.some((pattern) => pattern.test(snippet));
+}
+
 export function withSnippets(uncoveredBranches, fileContent) {
-  return uncoveredBranches.map((branch) => ({ ...branch, snippet: snippetAt(fileContent, branch.line) }));
+  return uncoveredBranches
+    .map((branch) => ({ ...branch, snippet: snippetAt(fileContent, branch.line) }))
+    .filter((branch) => !isFrameworkNoise(branch.snippet));
 }
 
 export function parseLcov(reportDir, projectRoot) {

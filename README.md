@@ -27,15 +27,19 @@ runner since that version) — see [Limitations](#limitations) for what that rul
 
 ## Usage
 
-### `/coverage-check`
+### `/angular-coverage-guard:coverage-check`
 
-Run it from a chat turn in Claude Code, inside (or above) an Angular project:
+Run it from a chat turn in Claude Code, inside (or above) an Angular project. Claude Code namespaces
+skill commands by plugin, so this is the name to type — a bare `/coverage-check` won't resolve:
 
 ```
-/coverage-check              # changed files vs. the base branch, plus uncommitted changes
-/coverage-check --all        # the whole project
-/coverage-check src/app/foo  # a specific file or directory
+/angular-coverage-guard:coverage-check              # changed files vs. the base branch, plus uncommitted changes
+/angular-coverage-guard:coverage-check --all        # the whole project
+/angular-coverage-guard:coverage-check src/app/foo  # a specific file or directory
 ```
+
+If it can't find the Angular project on its own, or finds more than one, it'll ask which directory
+or named project to use (`--project-dir`/`--project`) rather than guess.
 
 It will:
 
@@ -59,13 +63,14 @@ It will:
 
 At the end of a turn, a lightweight hook checks whether any `.ts` source file changed in the working
 tree without its sibling `.spec.ts` also changing — no test run, just a `git` diff and a file check.
-If it finds any, it prints a short, non-blocking notice suggesting `/coverage-check`; otherwise it
+If it finds any, it prints a short, non-blocking notice suggesting
+`/angular-coverage-guard:coverage-check`; otherwise it
 stays silent. It only repeats the notice when the set of flagged files actually changes, so it won't
 nag every turn about the same gap. Disable it per project via `coverage-guard.config.json` (below).
 
 ## Example output
 
-From a real `/coverage-check --all` run against this repo's own example app:
+From a real `/angular-coverage-guard:coverage-check --all` run against this repo's own example app:
 
 | File | Tier | Status |
 |---|---|---|
@@ -125,9 +130,11 @@ match.
 - A scoped test run's coverage numbers reflect only the files included in that run, not the whole
   project's coverage.
 - Branch-gap detection reads raw `lcov.info` branch data, which can include compiler-generated
-  instrumentation (e.g. a branch attributed to a bare class declaration line) alongside real,
-  untested business logic. The skill is expected to use judgment and skip proposing tests for
-  snippets that are plainly boilerplate rather than a real decision point.
+  instrumentation (a branch attributed to a class declaration or a bare decorator line) alongside
+  real, untested business logic. Branches on a class-declaration or `@Pipe`/`@Component`/
+  `@Injectable`/`@Directive` line are filtered out by pattern on the source snippet; this is a
+  heuristic, not a parse of the compiled output, so an unusual case could still slip through either
+  direction.
 - Built and end-to-end tested on Windows. The unit test suite (`npm test`) also runs clean on Linux,
   and path handling is written to be platform-independent, but the full flow (spawning `ng`, the
   Stop hook) hasn't been exercised end to end on macOS/Linux yet.

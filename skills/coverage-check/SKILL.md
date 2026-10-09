@@ -4,7 +4,7 @@ description: Finds Angular + Vitest unit test coverage gaps in changed files (or
 disable-model-invocation: true
 ---
 
-# /coverage-check
+# /angular-coverage-guard:coverage-check
 
 ## 1. Parse the argument
 
@@ -54,10 +54,11 @@ Parse its JSON stdout.
   `lines.pct` — but still have an uncovered branch (e.g. one business-rule `if` never exercised by
   any test). This is a real, separate category of gap: a file can hit 90% lines while its one actual
   decision point is never tested. Treat each `branchGaps` entry exactly like a gap from `entries`:
-  read the file, propose a test for it, ask for approval, write it. When you read the branch's
-  `snippet`, use judgment — a snippet that's plain Angular/TypeScript boilerplate (e.g. a bare class
-  declaration line, not an `if`/`? :`/`&&`/`||`) is very likely compiler-generated instrumentation
-  noise, not a real missing test; say so and skip proposing a test for it rather than inventing one.
+  read the file, propose a test for it, ask for approval, write it. The script already filters out
+  the common compiler-generated noise (a branch attributed to a class declaration or a bare
+  `@Pipe`/`@Component`/`@Injectable`/`@Directive` line), but that's a pattern match, not a guarantee
+  — if a `snippet` still doesn't look like real decision logic (not an `if`/`?:`/`&&`/`||`), say so
+  and skip proposing a test for it rather than inventing one.
 
 If `entries` is empty and `branchGaps` is empty, tell the user there's nothing in scope and stop.
 

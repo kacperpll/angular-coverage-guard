@@ -124,3 +124,34 @@ test('withSnippets attaches the source snippet to each uncovered branch', () => 
   const result = withSnippets(branches, content);
   assert.deepEqual(result, [{ line: 2, block: 1, branch: 0, snippet: 'if (quantity >= threshold) {' }]);
 });
+
+test('withSnippets filters out branches on a class declaration line (compiler-generated noise)', () => {
+  const content = [
+    "import { Pipe, PipeTransform } from '@angular/core';",
+    '',
+    "@Pipe({ name: 'truncate' })",
+    'export class TruncatePipe implements PipeTransform {',
+    '  transform(value, maxLength = 20) {',
+    '    if (value.length <= maxLength) {',
+    '      return value;',
+    '    }',
+    '  }',
+    '}',
+  ].join('\n');
+
+  const branches = [
+    { line: 4, block: 2, branch: 0 },
+    { line: 4, block: 2, branch: 1 },
+    { line: 6, block: 0, branch: 0 },
+  ];
+
+  const result = withSnippets(branches, content);
+  assert.deepEqual(result.map((branch) => branch.line), [6]);
+  assert.equal(result[0].snippet, 'if (value.length <= maxLength) {');
+});
+
+test('withSnippets filters out a branch on a bare decorator line too', () => {
+  const content = ["@Component({ selector: 'app-x' })", 'export class X {}'].join('\n');
+  const branches = [{ line: 1, block: 0, branch: 0 }];
+  assert.deepEqual(withSnippets(branches, content), []);
+});
