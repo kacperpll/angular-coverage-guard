@@ -3,7 +3,7 @@ import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { parseCoverageSummary, parseLcov } from './coverage-parser.mjs';
+import { parseCoverageSummary, parseLcov, snippetAt, withSnippets } from './coverage-parser.mjs';
 
 const FIXTURES_DIR = path.join(import.meta.dirname, '..', '__fixtures__');
 
@@ -82,4 +82,20 @@ test('parseLcov skips non-.ts entries (compiled templates)', () => {
   } finally {
     rmSync(reportDir, { recursive: true, force: true });
   }
+});
+
+test('snippetAt returns the trimmed source line for a given line number', () => {
+  const content = 'line one\n  if (x > y) {\nline three\n';
+  assert.equal(snippetAt(content, 2), 'if (x > y) {');
+});
+
+test('snippetAt returns an empty string for an out-of-range line number', () => {
+  assert.equal(snippetAt('only line', 5), '');
+});
+
+test('withSnippets attaches the source snippet to each uncovered branch', () => {
+  const content = 'const a = 1;\nif (quantity >= threshold) {\n  return discounted;\n}\n';
+  const branches = [{ line: 2, block: 1, branch: 0 }];
+  const result = withSnippets(branches, content);
+  assert.deepEqual(result, [{ line: 2, block: 1, branch: 0, snippet: 'if (quantity >= threshold) {' }]);
 });

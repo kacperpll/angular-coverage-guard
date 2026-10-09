@@ -6,8 +6,7 @@ export const authGuard: CanActivateFn = (route) => {
   const token = route.queryParamMap.get('token');
 
   if (!token) {
-    router.navigate(['/']);
-    return false;
+    return router.createUrlTree(['/']);
   }
 
   return true;

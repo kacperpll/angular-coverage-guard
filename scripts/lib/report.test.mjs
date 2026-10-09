@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { sortEntriesByRisk } from './report.mjs';
+import { buildAnalysisReport, buildBranchGaps, sortEntriesByRisk } from './report.mjs';
 
 test('sorts by tier ascending first', () => {
   const entries = [
@@ -47,4 +47,81 @@ test('ties break alphabetically by file path', () => {
   ];
   const sorted = sortEntriesByRisk(entries);
   assert.deepEqual(sorted.map((e) => e.file), ['a.ts', 'z.ts']);
+});
+
+test('buildBranchGaps surfaces a tier 1-2 file that meets the line threshold but has an uncovered branch', () => {
+  const entries = [
+    {
+      file: 'src/app/services/price-calculator.service.ts',
+      tier: 2,
+      hasSpec: true,
+      lines: { pct: 90 },
+      uncoveredBranches: [{ line: 23, block: 1, branch: 0, snippet: 'if (quantity >= this.config.bulkThreshold) {' }],
+    },
+  ];
+  const gaps = buildBranchGaps(entries, 80);
+  assert.equal(gaps.length, 1);
+  assert.equal(gaps[0].file, 'src/app/services/price-calculator.service.ts');
+  assert.equal(gaps[0].uncoveredBranches[0].snippet, 'if (quantity >= this.config.bulkThreshold) {');
+});
+
+test('buildBranchGaps excludes tier 3 files even with uncovered branches', () => {
+  const entries = [
+    {
+      file: 'src/app/components/example.component.ts',
+      tier: 3,
+      hasSpec: true,
+      lines: { pct: 90 },
+      uncoveredBranches: [{ line: 5, block: 0, branch: 0, snippet: 'if (x) {' }],
+    },
+  ];
+  assert.deepEqual(buildBranchGaps(entries, 80), []);
+});
+
+test('buildBranchGaps excludes files already below the line threshold (already a gap)', () => {
+  const entries = [
+    {
+      file: 'src/app/interceptors/auth.interceptor.ts',
+      tier: 1,
+      hasSpec: true,
+      lines: { pct: 50 },
+      uncoveredBranches: [{ line: 11, block: 0, branch: 0, snippet: 'if (error.status === 401) {' }],
+    },
+  ];
+  assert.deepEqual(buildBranchGaps(entries, 80), []);
+});
+
+test('buildBranchGaps excludes files with no dedicated spec', () => {
+  const entries = [
+    {
+      file: 'src/app/guards/auth.guard.ts',
+      tier: 1,
+      hasSpec: false,
+      uncoveredBranches: [{ line: 5, block: 0, branch: 0, snippet: 'if (!token) {' }],
+    },
+  ];
+  assert.deepEqual(buildBranchGaps(entries, 80), []);
+});
+
+test('buildBranchGaps excludes files with no uncovered branches', () => {
+  const entries = [
+    { file: 'src/app/services/clean.service.ts', tier: 2, hasSpec: true, lines: { pct: 100 }, uncoveredBranches: [] },
+  ];
+  assert.deepEqual(buildBranchGaps(entries, 80), []);
+});
+
+test('buildAnalysisReport includes a branchGaps field alongside entries', () => {
+  const entries = [
+    {
+      file: 'src/app/services/price-calculator.service.ts',
+      tier: 2,
+      hasLogicSignal: true,
+      hasSpec: true,
+      lines: { pct: 90 },
+      uncoveredBranches: [{ line: 23, block: 1, branch: 0, snippet: 'if (quantity >= this.config.bulkThreshold) {' }],
+    },
+  ];
+  const report = buildAnalysisReport({ threshold: 80, runOutcome: 'threshold-met', entries });
+  assert.equal(report.branchGaps.length, 1);
+  assert.equal(report.entries.length, 1);
 });

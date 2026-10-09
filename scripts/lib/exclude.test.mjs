@@ -22,6 +22,8 @@ test('default excludes match regardless of nesting depth', () => {
   assert.ok(isExcluded('src/app/shared/shared.module.ts', excludes));
   assert.ok(isExcluded('src/environments/environment.ts', excludes));
   assert.ok(isExcluded('src/app/app.routes.ts', excludes));
+  assert.ok(isExcluded('src/app/app.config.ts', excludes));
+  assert.ok(isExcluded('src/app/app.config.server.ts', excludes));
 });
 
 test('default excludes do not match unrelated files', () => {

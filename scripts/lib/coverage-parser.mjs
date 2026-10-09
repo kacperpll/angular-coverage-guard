@@ -42,6 +42,15 @@ export function parseCoverageSummary(reportDir, projectRoot) {
   return perFile;
 }
 
+export function snippetAt(fileContent, lineNumber) {
+  const lines = fileContent.split('\n');
+  return (lines[lineNumber - 1] ?? '').trim();
+}
+
+export function withSnippets(uncoveredBranches, fileContent) {
+  return uncoveredBranches.map((branch) => ({ ...branch, snippet: snippetAt(fileContent, branch.line) }));
+}
+
 export function parseLcov(reportDir, projectRoot) {
   const lcovPath = path.join(reportDir, 'lcov.info');
   const raw = readFileSync(lcovPath, 'utf8');

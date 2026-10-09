@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { detectRunner, readGlobalLinesThreshold, resolveProject } from './lib/angular-project.mjs';
 import { loadUserConfig, resolveBaseBranchOverride, resolveExcludeConfig, resolveThreshold } from './lib/config.mjs';
-import { parseCoverageSummary, parseLcov } from './lib/coverage-parser.mjs';
+import { parseCoverageSummary, parseLcov, withSnippets } from './lib/coverage-parser.mjs';
 import { isExcluded, resolveExcludes } from './lib/exclude.mjs';
 import { detectBaseBranch, getChangedFiles } from './lib/git.mjs';
 import { buildAnalysisReport } from './lib/report.mjs';
@@ -124,7 +124,7 @@ function buildEntry(projectRoot, file, { withoutSpec, coverageByFile, lcovByFile
     lines: coverage.lines,
     branches: coverage.branches,
     uncoveredLines: lcov?.uncoveredLines ?? [],
-    uncoveredBranches: lcov?.uncoveredBranches ?? [],
+    uncoveredBranches: withSnippets(lcov?.uncoveredBranches ?? [], content),
     tier,
     hasLogicSignal: logicSignal,
   };
