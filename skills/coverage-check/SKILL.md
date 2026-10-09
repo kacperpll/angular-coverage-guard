@@ -95,12 +95,19 @@ for subscriptions) wherever the new test code touches them.
 
 ## 9. Verify
 
-Run the same analysis script again, scoped to just the file(s) you wrote or edited, reusing the
-same `projectRoot` from step 3 as `--project-dir` so it doesn't re-search:
+Run the verification script, scoped to just the source file(s) whose spec you wrote or edited,
+reusing the same `projectRoot` from step 3 as `--project-dir` so it doesn't re-search:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" --project-dir <projectRoot> <path to the source file>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/verify-written-tests.mjs" --project-dir <projectRoot> --files <comma-separated source file paths>
 ```
+
+This is a separate script from step 3's, not the same one scoped to a path — it expects every file
+you pass to already have a written spec (it errors clearly if one doesn't) and its output is
+`{ projectRoot, projectRootSource, runOutcome, files }`, where each entry in `files` is
+`{ file, lines, branches, uncoveredLines, uncoveredBranches }` (or a `note` if the spec didn't
+exercise the file at all) — no `tier`/`hasLogicSignal`/gap framing, since this step reports new
+coverage, it doesn't re-run risk analysis.
 
 Report the new coverage for exactly those files, and say plainly that this reflects only this
 scoped run, not the whole project. If the result is an error (e.g. failing tests), show it and

@@ -1,13 +1,13 @@
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
-import { detectRunner, readGlobalLinesThreshold, resolveProject } from './lib/angular-project.mjs';
+import { readGlobalLinesThreshold } from './lib/angular-project.mjs';
 import { loadUserConfig, resolveBaseBranchOverride, resolveExcludeConfig, resolveThreshold } from './lib/config.mjs';
 import { parseCoverageSummary, parseLcov, withSnippets } from './lib/coverage-parser.mjs';
 import { isExcluded, resolveExcludes } from './lib/exclude.mjs';
 import { detectBaseBranch, getChangedFiles } from './lib/git.mjs';
+import { setupProject } from './lib/project-setup.mjs';
 import { buildAnalysisReport } from './lib/report.mjs';
 import { classifyTier, hasLogicSignal } from './lib/risk.mjs';
-import { locateProjectRoot } from './lib/project-locator.mjs';
 import { hasSpec, toSpecRelativePath } from './lib/spec-finder.mjs';
 import { runCoverage } from './lib/test-runner.mjs';
 
@@ -138,33 +138,15 @@ function main() {
   const { all, project: requestedProject, projectDir, positional } = parseArgs(process.argv.slice(2));
   const cwd = process.cwd();
 
-  const location = locateProjectRoot(cwd, projectDir);
+  const setup = setupProject(cwd, { projectDir, requestedProject });
 
-  if (location.status === 'not-found-at-explicit-path') {
-    throw new Error(`No angular.json found at ${location.path} (from --project-dir).`);
-  }
-
-  if (location.status === 'none') {
-    throw new Error(
-      `No angular.json found searching upward from ${cwd}, nor downward (max 3 levels, skipping node_modules/dist). ` +
-        'Pass --project-dir <path> to point at the Angular project directly.',
-    );
-  }
-
-  if (location.status === 'multiple') {
-    console.log(JSON.stringify({ multipleProjectsFound: location.candidates }));
+  if (setup.status === 'multiple') {
+    console.log(JSON.stringify({ multipleProjectsFound: setup.candidates }));
     process.exit(1);
     return;
   }
 
-  const { projectRoot, source: projectRootSource } = location;
-
-  const project = resolveProject(projectRoot, requestedProject);
-
-  const runner = detectRunner(project.config);
-  if (runner === 'karma') {
-    throw new Error('This project uses Karma. angular-coverage-guard v1 only supports Vitest-based Angular projects.');
-  }
+  const { projectRoot, projectRootSource, project } = setup;
 
   const userConfig = loadUserConfig(projectRoot);
   const excludes = resolveExcludes(resolveExcludeConfig(userConfig));
