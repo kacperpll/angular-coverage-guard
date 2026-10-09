@@ -7,6 +7,7 @@ import { isExcluded, resolveExcludes } from './lib/exclude.mjs';
 import { detectBaseBranch, getChangedFiles } from './lib/git.mjs';
 import { buildAnalysisReport } from './lib/report.mjs';
 import { classifyTier, hasLogicSignal } from './lib/risk.mjs';
+import { locateProjectRoot } from './lib/project-locator.mjs';
 import { hasSpec, toSpecRelativePath } from './lib/spec-finder.mjs';
 import { runCoverage } from './lib/test-runner.mjs';
 
@@ -51,7 +52,7 @@ function collectSourceFiles(walkRoot, projectRoot) {
 }
 
 function parseArgs(argv) {
-  const result = { all: false, project: null, positional: null };
+  const result = { all: false, project: null, projectDir: null, positional: null };
 
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
@@ -60,6 +61,9 @@ function parseArgs(argv) {
       result.all = true;
     } else if (arg === '--project') {
       result.project = argv[i + 1] ?? null;
+      i += 1;
+    } else if (arg === '--project-dir') {
+      result.projectDir = argv[i + 1] ?? null;
       i += 1;
     } else if (!arg.startsWith('--')) {
       result.positional = arg;
@@ -126,9 +130,34 @@ function buildEntry(projectRoot, file, { withoutSpec, coverageByFile, lcovByFile
   };
 }
 
+function printReport(projectRoot, projectRootSource, report) {
+  console.log(JSON.stringify({ projectRoot, projectRootSource, ...report }, null, 2));
+}
+
 function main() {
-  const { all, project: requestedProject, positional } = parseArgs(process.argv.slice(2));
-  const projectRoot = process.cwd();
+  const { all, project: requestedProject, projectDir, positional } = parseArgs(process.argv.slice(2));
+  const cwd = process.cwd();
+
+  const location = locateProjectRoot(cwd, projectDir);
+
+  if (location.status === 'not-found-at-explicit-path') {
+    throw new Error(`No angular.json found at ${location.path} (from --project-dir).`);
+  }
+
+  if (location.status === 'none') {
+    throw new Error(
+      `No angular.json found searching upward from ${cwd}, nor downward (max 3 levels, skipping node_modules/dist). ` +
+        'Pass --project-dir <path> to point at the Angular project directly.',
+    );
+  }
+
+  if (location.status === 'multiple') {
+    console.log(JSON.stringify({ multipleProjectsFound: location.candidates }));
+    process.exit(1);
+    return;
+  }
+
+  const { projectRoot, source: projectRootSource } = location;
 
   const project = resolveProject(projectRoot, requestedProject);
 
@@ -146,7 +175,7 @@ function main() {
   relevantFiles = relevantFiles.filter((file) => !isExcluded(file, excludes));
 
   if (relevantFiles.length === 0) {
-    console.log(JSON.stringify(buildAnalysisReport({ threshold, runOutcome: null, entries: [] }), null, 2));
+    printReport(projectRoot, projectRootSource, buildAnalysisReport({ threshold, runOutcome: null, entries: [] }));
     return;
   }
 
@@ -185,7 +214,7 @@ function main() {
 
   const entries = relevantFiles.map((file) => buildEntry(projectRoot, file, { withoutSpec, coverageByFile, lcovByFile }));
 
-  console.log(JSON.stringify(buildAnalysisReport({ threshold, runOutcome, entries }), null, 2));
+  printReport(projectRoot, projectRootSource, buildAnalysisReport({ threshold, runOutcome, entries }));
 }
 
 try {

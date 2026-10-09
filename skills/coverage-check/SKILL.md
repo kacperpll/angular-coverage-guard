@@ -14,24 +14,30 @@ disable-model-invocation: true
 
 ## 2. Locate the project root
 
-Find the directory containing `angular.json` (usually the current directory). If none exists,
-tell the user plainly and stop — do not guess a different directory.
+You don't need to find `angular.json` yourself — the script does this. If the user already told you
+which directory the Angular project is in, pass it explicitly with `--project-dir <path>`. Otherwise
+just run the script with no project-dir argument and let it search: upward from the current
+directory first, then downward (max 3 levels, skipping `node_modules`/`dist`) if nothing was found
+upward.
 
 ## 3. Run the analysis script
 
-From the project root, run:
-
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" [path|--all]
+node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" [--project-dir <path>] [path|--all]
 ```
 
 Parse its JSON stdout.
 
+- If it printed `{"multipleProjectsFound": ["path1", "path2", ...]}`, list the candidates and ask
+  the user which one to use — do not guess. Re-run with `--project-dir <their choice>`.
 - If it printed `{"error": "..."}`, relay that message plainly and stop. Do not retry with
   different arguments or guess a workaround — the script's error already explains what's wrong
-  (no `angular.json` found, no base branch detected, a crashed test run, or failing tests that make
-  coverage numbers unreliable).
-- Otherwise it returns `{ threshold, runOutcome, entries }`, where each entry is one relevant `.ts`
+  (no `angular.json` found anywhere, no base branch detected, a crashed test run, or failing tests
+  that make coverage numbers unreliable).
+- Otherwise it returns `{ projectRoot, projectRootSource, threshold, runOutcome, entries }`.
+  `projectRootSource` is `"explicit"` (you passed `--project-dir`), `"upward"`, or `"downward"` — if
+  it's `"downward"`, say which directory was used, since it wasn't the one you started in. Each
+  entry in `entries` is one relevant `.ts`
   source file:
   - `{ file, hasSpec: false, note: "no dedicated spec" }` — no spec file exists for it at all. This
     does **not** mean 0% coverage; the file may be exercised indirectly by other tests.
@@ -77,10 +83,11 @@ for subscriptions) wherever the new test code touches them.
 
 ## 9. Verify
 
-Run the same analysis script again, scoped to just the file(s) you wrote or edited:
+Run the same analysis script again, scoped to just the file(s) you wrote or edited, reusing the
+same `projectRoot` from step 3 as `--project-dir` so it doesn't re-search:
 
 ```
-node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" <path to the source file>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" --project-dir <projectRoot> <path to the source file>
 ```
 
 Report the new coverage for exactly those files, and say plainly that this reflects only this
