@@ -1,0 +1,12 @@
+{
+  "name": "angular-coverage-guard-marketplace",
+  "owner": {
+    "name": "kacperpll"
+  },
+  "plugins": [
+    {
+      "name": "angular-coverage-guard",
+      "source": "./"
+    }
+  ]
+}

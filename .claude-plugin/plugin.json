@@ -1,0 +1,10 @@
+{
+  "name": "angular-coverage-guard",
+  "displayName": "Angular Coverage Guard",
+  "description": "Finds untested code in Angular + Vitest projects, proposes test cases and writes them after approval.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Kacper Duniewicz"
+  },
+  "license": "MIT"
+}

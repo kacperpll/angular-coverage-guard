@@ -25,13 +25,13 @@ project root, untracked-file visibility, shell-free CLI invocation, and hook not
   --coverage-reporters=lcov` explicitly rather than rely on defaults.
 - `--include` accepts source file paths and resolves them to the matching spec file, or directory
   paths for contained specs — no confirmed pass-through of Vitest's own `--changed`/`--related`
-  flags through `ng test`. **v1 approach:** compute changed files via git ourselves, map each to
-  its spec path, invoke `ng test --coverage --coverage-reporters=json-summary
-  --coverage-reporters=lcov --include <spec paths> --watch=false`. **This is the single biggest
-  unverified assumption in the plan and is now a hard checkpoint (see Sequencing, step 2) — no
-  code is written against its output shape until the user has reviewed the actual empirical
-  result.** Fallback if it doesn't hold: bypass `ng test` and call `vitest run --coverage` directly
-  via a generated minimal config, isolated entirely inside `lib/test-runner.mjs`.
+  flags through `ng test`. **v1 approach (confirmed empirically, see "Checkpoint results" below):**
+  compute changed files via git ourselves, resolve each to its spec via `spec-finder.mjs`, and
+  invoke `ng test --coverage --coverage-reporters=json-summary --coverage-reporters=lcov --include
+  <existing spec paths only> --watch=false`. Passing a source path with no spec is **not** safe (it
+  crashes the whole run — see "Checkpoint results"), so files without a spec are simply never
+  included and are reported directly as "no dedicated spec." No `vitest run` bypass/fallback turned
+  out to be necessary.
 - A filtered/partial run only reports coverage for files actually exercised by that run — this
   must be stated in output, not presented as whole-project coverage.
 - Existing thresholds live in `angular.json`'s test target `coverageThresholds`. **v1 only reads
@@ -76,6 +76,74 @@ project root, untracked-file visibility, shell-free CLI invocation, and hook not
 - A source `.ts` file only counts as "covered" if its sibling `.spec.ts` is **itself also in the
   working-tree change set** — not merely present on disk. Catches source changes whose existing
   spec wasn't updated.
+
+## Checkpoint results (step 2, empirical — approved)
+
+Ran against `examples/demo-app` (Angular 22.2.2, Vitest 5) with
+`ng test --coverage --coverage-reporters=json-summary --coverage-reporters=lcov --watch=false [--include ...]`:
+
+- **Report location**: `coverage/<project-name>/` (e.g. `coverage/demo-app/coverage-summary.json`,
+  `coverage/demo-app/lcov.info`), not a flat `coverage/` — `test-runner.mjs` must know the project
+  name, and must read the actual configured path from `angular.json` if the project overrides it,
+  falling back to `coverage/<project>/` only when it doesn't.
+- **Default reporters** (bare `--coverage`, no `--coverage-reporters`): `text`, `html`, `clover.xml`,
+  `coverage-final.json` — confirms `json-summary`/`lcov` must always be requested explicitly.
+- **`coverage-summary.json` keys are absolute paths with backslashes** on Windows
+  (`F:\\repository\\...\\src\\app\\app.component.ts`). **`lcov.info`'s `SF:` paths are relative but
+  still use backslashes.** Both need normalizing (`path.relative` to the project root, `\` → `/`,
+  drive-letter comparison case-insensitive) before comparing against git-diff paths.
+- **Compiled template files appear as their own coverage entries** (e.g. `app.component.html` next
+  to `app.component.ts`) — `coverage-parser.mjs` must filter to `.ts` entries only.
+- **Exit codes, confirmed both directions**: `0` when the included scope's aggregate meets
+  `angular.json`'s `coverageThresholds.lines`; `1` with an `ERROR: Coverage for lines (X%) does not
+  meet global threshold (Y%)` line on stdout when it doesn't. The threshold check is evaluated
+  against whatever subset was actually run, not the whole project.
+- **Critical, plan-changing finding**: `--include <source path with no existing spec>` is **not** a
+  safe no-op. Vitest tries to run the source file itself as a test file and fails hard
+  (`Error: No test suite found in file ...`), exit 1, **no coverage report produced at all**. A
+  directory `--include` with zero spec files inside fails the same way
+  (`No tests found matching the following patterns`). The CLI help's "includes the corresponding
+  test file if one exists" does not degrade gracefully when one doesn't exist.
+- Repeated `--include` flags for multiple existing spec files work correctly and scope coverage to
+  just those files, confirmed with two real specs.
+
+**Design consequence (approved)**: `coverage-check.mjs` never passes a source path to `--include`.
+It resolves each relevant changed file to its spec via `spec-finder.mjs`, and only files **with an
+existing spec** go into `--include` (spec paths, not source paths). A file with no spec at all is
+never handed to `ng test` — it's reported directly from `spec-finder.mjs`'s own "no spec" fact, with
+zero risk of the crash above. If the relevant file set has no specs at all, `ng test` is not invoked.
+No `vitest run` bypass/fallback is needed — the spec-only `--include` approach is sufficient on its
+own.
+
+## Corrections from the checkpoint review (incorporated below)
+
+1. **2025 file-naming is a real requirement, not a limitation to document away.** `risk.mjs`
+   classifies by **file content** first (`CanActivateFn`/`CanMatchFn`/`implements CanActivate` →
+   guard; `HttpInterceptorFn`/`HttpInterceptor` → interceptor; `ResolveFn` → resolver; `@Injectable`
+   → service; `@Pipe`, `@Directive`, `@Component`), with the existing filename-suffix patterns kept
+   only as a **fallback** when content detection is inconclusive. `risk.mjs`'s tests cover both the
+   2016 (`*.guard.ts`) and 2025 (concise, no type suffix) naming styles. `examples/demo-app` itself
+   stays on 2016 naming (no need to duplicate it in 2025 style) — the dual-style support is proven
+   by `risk.mjs`'s own unit tests, not by the demo app.
+2. A changed file with **no existing spec at all** is reported as **"no dedicated spec"**, not as
+   "0% covered" — it may be exercised indirectly by other tests (e.g. through a component that uses
+   it), and claiming a hard 0% would misstate that.
+3. **`test-runner.mjs`** deletes the coverage report directory before each run and verifies the
+   report file actually exists after the run finishes, rather than assuming success from exit code
+   alone. It resolves the report path from the project's `angular.json` test-target options if
+   configured there, falling back to `coverage/<project>/` otherwise.
+4. **Three distinct exit-1 cases**, disambiguated by `test-runner.mjs`/`coverage-check.mjs` rather
+   than treated as one generic failure:
+   - **Threshold not met**: report file exists and stdout contains the `ERROR: Coverage for lines`
+     line — proceed normally, this is the expected "gaps found" case.
+   - **Red tests**: one or more specs failed — surfaced to the user explicitly as failing tests, and
+     any coverage numbers from that run are called out as unreliable (a failed test may not have
+     exercised its intended lines).
+   - **Crash** (e.g. the `--include`-with-no-spec failure mode, a build error, a missing report
+     file): surfaced as a hard error, no coverage interpretation attempted.
+5. **Path normalization from the coverage report**: `path.relative` against the project root, `\` →
+   `/`, and the drive letter compared case-insensitively (Windows paths from the report vs. paths
+   derived elsewhere may differ only in drive-letter case).
 
 ## Decisions locked in with the user (final)
 
@@ -211,11 +279,23 @@ both CLI orchestrators and the hook import.
   one project exists and none was specified).
 - **`exclude.mjs`** — merges user globs with defaults, matches via `path.matchesGlob`.
 - **`spec-finder.mjs`** — source→spec path mapping, sibling spec discovery for convention-reading.
+  `hasSpec(sourcePath)` is also what decides whether a file goes to `--include` at all (see
+  "Checkpoint results" above) — a file with no spec is reported as "no dedicated spec" and never
+  passed to `test-runner.mjs`.
 - **`test-runner.mjs`** — spawns the local Angular CLI directly via `process.execPath` +
-  `node_modules/@angular/cli/bin/ng.js` (no shell, see "Windows-specific handling") with the flags
-  from question 1–2; owns the `--include` assumption and its fallback; never imported by the hook.
+  `node_modules/@angular/cli/bin/ng.js` (no shell, see "Windows-specific handling"), passing
+  `--include` only with existing spec paths (never bare source paths, and never invoked at all if
+  the relevant file set has no specs — see "Checkpoint results"). Resolves the coverage report path
+  from the project's `angular.json` test-target options if set, else `coverage/<project>/`; deletes
+  that directory before each run and verifies the report file exists after. Distinguishes three
+  exit-1 outcomes: threshold-not-met (report exists, stdout has the `ERROR: Coverage for lines`
+  line — normal case), red tests (one or more specs failed — surfaced explicitly, coverage from that
+  run flagged unreliable), and crash (no report file at all — hard error, no coverage interpretation
+  attempted).
 - **`coverage-parser.mjs`** — reads `coverage-summary.json` for per-file %, `lcov.info` for specific
-  uncovered line/branch numbers.
+  uncovered line/branch numbers. Normalizes every path from both reports (`path.relative` to the
+  project root, `\` → `/`, drive letter compared case-insensitively) and filters out non-`.ts`
+  entries (compiled template files appear as their own coverage entries — see "Checkpoint results").
 - **`risk.mjs`** — 3-tier classification + `hasLogicSignal` detection + sort (see below).
 - **`report.mjs`** — assembles the stable JSON schema printed to stdout for both orchestrators.
 - **`hooks/check-coverage.mjs`** — reads stdin JSON, checks `stop_hook_active` first, walks up from
@@ -229,13 +309,31 @@ both CLI orchestrators and the hook import.
   `git.mjs`, `config.mjs`, `exclude.mjs`, `spec-finder.mjs` — never `test-runner.mjs` or
   `coverage-parser.mjs`. Fails open (catches all errors, exits 0).
 
-## Risk heuristic (`lib/risk.mjs`) — 3 tiers
+## Risk heuristic (`lib/risk.mjs`) — 3 tiers, content-first classification
 
+Classification reads the file's **content** first; the filename-suffix patterns below are only a
+**fallback** for when content detection is inconclusive (e.g. a file that re-exports something, or
+a style the content patterns don't recognize). This is what makes the heuristic work on both the
+classic 2016 (`*.guard.ts`) and the concise 2025 (no type suffix) Angular file-naming styles.
+
+**Content signals** (checked via lightweight text/regex matching, no TS parsing):
+- Guard: `CanActivateFn`, `CanMatchFn`, `CanActivateChildFn`, or `implements CanActivate` /
+  `implements CanMatch`.
+- Interceptor: `HttpInterceptorFn`, or `implements HttpInterceptor`.
+- Resolver: `ResolveFn`, or `implements Resolve`.
+- Service: `@Injectable`.
+- Pipe: `@Pipe`. Directive: `@Directive`. Component: `@Component`.
+
+**Filename-suffix fallback** (only used when none of the content signals above match):
 1. **Tier 1** — `*.guard.ts`, `*.interceptor.ts`, `*.resolver.ts` (gatekeeping/routing logic).
 2. **Tier 2** — `*.service.ts`, `*.pipe.ts`, `/utils/`, `/util/`, `/helpers/` paths or
    `*.util(s).ts`/`*.helper.ts`, `*.directive.ts`, `*.validator(s).ts`, state files
    (`*.reducer.ts`, `*.effects.ts`, `*.selectors.ts`, `*.store.ts`).
 3. **Tier 3** — everything else, primarily `*.component.ts`.
+
+A content signal maps directly to the same tier its filename-suffix counterpart would (guard/
+interceptor/resolver → tier 1; service/pipe/directive → tier 2; component → tier 3) — the content
+check just makes that mapping independent of what the file happens to be named.
 
 **`hasLogicSignal(fileContents)`** — text-scan for `inject(`, constructor-injected params,
 `subscribe(`, `Subject`, `Observable`, `effect(`, `computed(`. Used as a secondary sort key inside
@@ -247,6 +345,9 @@ tier 3 so smart/container components (signal present) sort before purely present
 
 `*.module.ts`, `main.ts`, `environments/**`, `*.routes.ts` are handled by `exclude.mjs` defaults
 and never reach classification in the normal case.
+
+`risk.mjs`'s `node:test` suite includes fixtures in both the 2016 and 2025 naming styles for every
+content signal above, so the fallback path and the content-first path are both independently tested.
 
 ## Config resolution order
 
@@ -289,14 +390,15 @@ and never reach classification in the normal case.
    **STOP HERE.** Report back to the user: the exact command used, where the coverage report lands
    on disk, its exact shape (`coverage-summary.json` structure, whether `lcov.info` is produced),
    and the exit code in both pass/fail-threshold cases. Do not proceed to step 3 without explicit
-   approval — if `--include` doesn't behave as assumed, the `vitest run` fallback is decided and
-   confirmed here, before anything else is built.
+   approval. **[Done — see "Checkpoint results" above. Approved, with corrections 1–5 folded into
+   the risk heuristic, spec-finder/test-runner/coverage-parser responsibilities above.]**
 3. **Thin vertical slice** (only after checkpoint approval): a minimal `git.mjs` (changed files
-   only), a minimal `coverage-check.mjs` that calls `test-runner.mjs` directly and
-   `coverage-parser.mjs` (json-summary only, no lcov yet), a minimal `report.mjs`, and a minimal
-   `SKILL.md`. Run `/coverage-check` end-to-end on `examples/demo-app` for real: gap detected, test
-   proposed by Claude, approved, written, verified. This proves the whole loop works before any
-   further investment.
+   only), a minimal `spec-finder.mjs` (existing-spec check only, used to filter `--include`), a
+   minimal `coverage-check.mjs` that calls `test-runner.mjs` directly and `coverage-parser.mjs`
+   (json-summary only, no lcov yet, with the path normalization from "Checkpoint results"), a
+   minimal `report.mjs`, and a minimal `SKILL.md`. Run `/coverage-check` end-to-end on
+   `examples/demo-app` for real: gap detected, test proposed by Claude, approved, written, verified.
+   This proves the whole loop works before any further investment.
 4. **Modularize + harden**, now that the shape is proven: expand `angular-project.mjs`
    (single-project enforcement, `--project`), `exclude.mjs` (`path.matchesGlob`, merge semantics),
    `risk.mjs` (3-tier + `hasLogicSignal`), `spec-finder.mjs`, `coverage-parser.mjs` (add lcov

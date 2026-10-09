@@ -1,0 +1,14 @@
+{
+  "name": "angular-coverage-guard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Claude Code plugin that finds untested code in Angular + Vitest projects, proposes test cases and writes them after approval.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.20.0"
+  },
+  "scripts": {
+    "test": "node --test scripts/lib/*.test.mjs"
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "total": { "lines": { "total": 16, "covered": 12, "skipped": 0, "pct": 75 } },
+  "C:\\fake\\project\\src\\app\\services\\example.service.ts": {
+    "lines": { "total": 10, "covered": 9, "skipped": 0, "pct": 90 },
+    "statements": { "total": 13, "covered": 12, "skipped": 0, "pct": 92.3 },
+    "branches": { "total": 9, "covered": 8, "skipped": 0, "pct": 88.88 },
+    "functions": { "total": 2, "covered": 2, "skipped": 0, "pct": 100 }
+  },
+  "C:\\fake\\project\\src\\app\\components\\example\\example.component.html": {
+    "lines": { "total": 6, "covered": 3, "skipped": 0, "pct": 50 },
+    "statements": { "total": 6, "covered": 3, "skipped": 0, "pct": 50 },
+    "branches": { "total": 0, "covered": 0, "skipped": 0, "pct": 100 },
+    "functions": { "total": 0, "covered": 0, "skipped": 0, "pct": 100 }
+  }
+}
