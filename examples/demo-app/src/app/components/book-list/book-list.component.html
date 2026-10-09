@@ -1,0 +1,8 @@
+<ul>
+  @for (book of books; track book.id) {
+    <li>
+      {{ book.title }}
+      <app-badge [label]="totalFor(book) + ''" />
+    </li>
+  }
+</ul>
