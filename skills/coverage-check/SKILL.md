@@ -17,8 +17,8 @@ disable-model-invocation: true
 You don't need to find `angular.json` yourself — the script does this. If the user already told you
 which directory the Angular project is in, pass it explicitly with `--project-dir <path>`. Otherwise
 just run the script with no project-dir argument and let it search: upward from the current
-directory first, then downward (max 3 levels, skipping `node_modules`/`dist`) if nothing was found
-upward.
+directory first, then downward (max 3 levels, skipping `node_modules`, `dist`, `.git`) if nothing
+was found upward.
 
 ## 3. Run the analysis script
 
@@ -28,12 +28,16 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/coverage-check.mjs" [--project-dir <path>] [
 
 Parse its JSON stdout.
 
-- If it printed `{"multipleProjectsFound": ["path1", "path2", ...]}`, list the candidates and ask
-  the user which one to use — do not guess. Re-run with `--project-dir <their choice>`.
-- If it printed `{"error": "..."}`, relay that message plainly and stop. Do not retry with
-  different arguments or guess a workaround — the script's error already explains what's wrong
-  (no `angular.json` found anywhere, no base branch detected, a crashed test run, or failing tests
-  that make coverage numbers unreliable).
+- If it printed `{"multipleProjectsFound": ["path1", "path2", ...]}`, that's multiple **directories**
+  each with their own `angular.json` — list the candidates and ask the user which one to use, do not
+  guess. Re-run with `--project-dir <their choice>`.
+- If the error message starts with `Multiple projects found in angular.json`, that's a different
+  case: one `angular.json` **workspace** with several named projects in it. List the project names
+  from the message and ask the user which to use, then re-run with `--project <their choice>`.
+- Any other `{"error": "..."}`, relay that message plainly and stop. Do not retry with different
+  arguments or guess a workaround — the script's error already explains what's wrong (no
+  `angular.json` found anywhere, no base branch detected, a crashed test run, or failing tests that
+  make coverage numbers unreliable).
 - Otherwise it returns `{ projectRoot, projectRootSource, threshold, runOutcome, entries, branchGaps }`.
   `projectRootSource` is `"explicit"` (you passed `--project-dir`), `"upward"`, or `"downward"` — if
   it's `"downward"`, say which directory was used, since it wasn't the one you started in. Each
@@ -59,10 +63,10 @@ If `entries` is empty and `branchGaps` is empty, tell the user there's nothing i
 
 ## 4. Present a summary
 
-Show the files below `threshold` (by `lines.pct`, when present) or with no dedicated spec, grouped
-so files with no spec at all and guards/interceptors/resolvers/services/pipes/utils come before
-components (this ordering refinement lands in a later iteration — for now, just call out files
-with no spec first, then low-coverage files, in the order the script returned them). Then show
+`entries` is already risk-sorted by the script: guards/interceptors/resolvers first, then
+services/pipes/utils, then components (logic-bearing ones before purely presentational ones within
+a tier), worst-covered first within each group. Present the files below `threshold` (by `lines.pct`,
+when present) or with no dedicated spec in that same order — don't re-sort them. Then show
 `branchGaps` as its own section — these files are "healthy" by lines.pct, so don't mix them into the
 same table as the line-coverage gaps above.
 
