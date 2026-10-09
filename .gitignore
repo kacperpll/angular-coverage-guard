@@ -26,3 +26,4 @@ Thumbs.db
 # Claude Code personal files (not shared)
 CLAUDE.local.md
 .claude/settings.local.json
+.claude/settings.json
