@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempSync, copyFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, copyFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
@@ -70,6 +70,31 @@ test('parseLcov reports uncovered lines and branches, backslash SF paths normali
     assert.deepEqual(entry.uncoveredBranches, [{ line: 8, block: 0, branch: 1 }]);
   } finally {
     rmSync(reportDir, { recursive: true, force: true });
+  }
+});
+
+test('parseCoverageSummary normalizes absolute POSIX paths, independent of the host platform', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'coverage-guard-'));
+
+  try {
+    writeFileSync(
+      path.join(dir, 'coverage-summary.json'),
+      JSON.stringify({
+        total: { lines: { total: 1, covered: 1, skipped: 0, pct: 100 } },
+        '/fake/project/src/app/services/example.service.ts': {
+          lines: { total: 10, covered: 9, skipped: 0, pct: 90 },
+          statements: { total: 10, covered: 9, skipped: 0, pct: 90 },
+          branches: { total: 2, covered: 2, skipped: 0, pct: 100 },
+          functions: { total: 1, covered: 1, skipped: 0, pct: 100 },
+        },
+      }),
+    );
+
+    const result = parseCoverageSummary(dir, '/fake/project');
+    assert.ok(result.has('src/app/services/example.service.ts'));
+    assert.equal(result.get('src/app/services/example.service.ts').lines.pct, 90);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
   }
 });
 

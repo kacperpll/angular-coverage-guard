@@ -22,8 +22,8 @@ spinning up a CI pipeline for it.
 
 Requirements on the machine running Claude Code: **Node >= 22.20.0** (the plugin's own scripts use
 `node:path`'s `path.matchesGlob`, stable from that version). The target Angular project itself needs
-Angular's Vitest-based unit-test builder (`@angular/build:unit-test`, the default test runner in
-recent Angular CLI versions) — see [Limitations](#limitations) for what that rules out.
+**Angular 21+** with its Vitest-based unit-test builder (`@angular/build:unit-test`, the default test
+runner since that version) — see [Limitations](#limitations) for what that rules out.
 
 ## Usage
 
@@ -55,7 +55,7 @@ It will:
 7. Write only what you approved, then re-run coverage scoped to just those files and report the new
    numbers.
 
-### Stop hook (automatic, opt-in by default)
+### Stop hook (automatic, on by default)
 
 At the end of a turn, a lightweight hook checks whether any `.ts` source file changed in the working
 tree without its sibling `.spec.ts` also changing — no test run, just a `git` diff and a file check.
@@ -65,9 +65,28 @@ nag every turn about the same gap. Disable it per project via `coverage-guard.co
 
 ## Example output
 
-A full recorded `/coverage-check --all` session against this repo's own example app — the gaps
-table, the branch-gaps section, the test proposals, and the coverage after writing and verifying
-them — is in [`docs/examples/demo-run.md`](docs/examples/demo-run.md).
+From a real `/coverage-check --all` run against this repo's own example app:
+
+| File | Tier | Status |
+|---|---|---|
+| `src/app/guards/auth.guard.ts` | 1 (guard) | no dedicated spec |
+| `src/app/interceptors/auth.interceptor.ts` | 1 (interceptor) | 50% lines, 0% branches — uncovered lines 11, 12, 15 |
+| `src/app/resolvers/book.resolver.ts` | 1 (resolver) | no dedicated spec |
+| `src/app/pipes/truncate.pipe.ts` | 2 (pipe) | no dedicated spec |
+| `src/app/utils/array.util.ts` | 2 (util) | no dedicated spec |
+
+Plus a **branch gap** that the table above wouldn't catch — `price-calculator.service.ts` meets the
+80% line threshold, but its one real business rule is never exercised:
+
+> line 23: `if (quantity >= this.config.bulkThreshold) {`
+
+Test proposed for it: *applies the bulk discount when quantity meets the bulk threshold* (using a
+quantity exactly equal to `bulkThreshold`, testing the `>=` boundary itself). After approval and
+writing it, that file went from 90%/88.88% to 100%/100%.
+
+The full session — the complete gaps table, the branch-gaps section, every test proposal, and the
+coverage after writing and verifying them — is in
+[`docs/examples/demo-run.md`](docs/examples/demo-run.md).
 
 ## Configuration
 
@@ -109,10 +128,21 @@ match.
   instrumentation (e.g. a branch attributed to a bare class declaration line) alongside real,
   untested business logic. The skill is expected to use judgment and skip proposing tests for
   snippets that are plainly boilerplate rather than a real decision point.
-- Built and tested on Windows; the invocation paths (spawning the local Angular CLI directly via
-  `process.execPath`, no shell) are designed to be cross-platform, but v1 hasn't been verified on
-  macOS/Linux.
+- Built and end-to-end tested on Windows. The unit test suite (`npm test`) also runs clean on Linux,
+  and path handling is written to be platform-independent, but the full flow (spawning `ng`, the
+  Stop hook) hasn't been exercised end to end on macOS/Linux yet.
+
+## Roadmap
+
+- **Karma/Jasmine support** — the next priority. A lot of existing Angular apps still run Karma and
+  won't migrate to Vitest just to use this plugin.
+- E2E (Cypress) coverage, after that.
 
 ## License
 
 [MIT](LICENSE)
+
+## About
+
+Built by Kacper Duniewicz — front-end lead specialising in Angular modernisation and test coverage.
+Available for contract work: [linkedin.com/in/kacper-duniewicz](https://linkedin.com/in/kacper-duniewicz)

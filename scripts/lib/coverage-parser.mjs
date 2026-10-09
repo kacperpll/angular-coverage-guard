@@ -5,11 +5,21 @@ function normalizeDriveLetter(rawPath) {
   return /^[a-zA-Z]:/.test(rawPath) ? rawPath[0].toLowerCase() + rawPath.slice(1) : rawPath;
 }
 
+// The report's paths can be Windows-style (drive letter, backslashes) even when this script
+// itself is running on Linux (and vice versa, in principle) - the report and the project root are
+// always generated on the same host as each other, but not necessarily the same host running this
+// parser if a report is inspected after the fact. Pick the path module by what the string actually
+// looks like, never by `process.platform`, so `node:path`'s own platform-default behavior can't
+// silently mis-parse a path in the "wrong" format.
+function pathModuleFor(rawPath) {
+  return /^[a-zA-Z]:[\\/]/.test(rawPath) || rawPath.includes('\\') ? path.win32 : path.posix;
+}
+
 function toProjectRelativePosix(rawPath, projectRoot) {
   const normalizedRaw = normalizeDriveLetter(rawPath);
   const normalizedRoot = normalizeDriveLetter(projectRoot);
   const isAbsolute = /^[a-zA-Z]:[\\/]/.test(normalizedRaw) || normalizedRaw.startsWith('/');
-  const relative = isAbsolute ? path.relative(normalizedRoot, normalizedRaw) : normalizedRaw;
+  const relative = isAbsolute ? pathModuleFor(normalizedRaw).relative(normalizedRoot, normalizedRaw) : normalizedRaw;
 
   return relative.split('\\').join('/');
 }
