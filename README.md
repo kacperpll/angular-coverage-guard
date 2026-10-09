@@ -145,11 +145,11 @@ match.
   won't migrate to Vitest just to use this plugin.
 - E2E (Cypress) coverage, after that.
 
+## About
+
+Built by Kacper Duniewicz, a front-end lead specializing in Angular modernization and test
+coverage. Available for contract work: [linkedin.com/in/kacper-duniewicz](https://linkedin.com/in/kacper-duniewicz)
+
 ## License
 
 [MIT](LICENSE)
-
-## About
-
-Built by Kacper Duniewicz — front-end lead specialising in Angular modernisation and test coverage.
-Available for contract work: [linkedin.com/in/kacper-duniewicz](https://linkedin.com/in/kacper-duniewicz)
